@@ -8,52 +8,27 @@ import userRouter from "./routes/userRoute.js";
 import ownerRouter from "./routes/ownerRoute.js";
 import bookingRouter from "./routes/bookingRoutes.js";
 
-//init express app
+// Init express app
 const app = express();
 
-//middleware
-app.use(
-  cors()
-  //   {
-  //   origin:
-  //     process.env.NODE_ENV === "production"
-  //       ? process.env.FRONTEND_URL
-  //       : ["http://127.0.0.1:5173"],
-  //   credentials: true,
-  // }
-);
+// Middleware - with CORS removed as requested
 app.use(express.json());
 
 // Routes
 app.get("/", (req, res) => res.send("Server is running"));
-app.use("/api/user", userRouter);
-app.use("/api/owner", ownerRouter);
-app.use("/api/booking", bookingRouter);
 
-// Connect to MongoDB when the app initializes
+// Database connection handling
 let isConnected = false;
 
-// Only connect once
-const connectToDatabase = async () => {
-  if (isConnected) {
-    console.log("Using existing database connection");
-    return;
-  }
-
-  try {
-    await connectDB();
-    isConnected = true;
-    console.log("✅ MongoDB Connected");
-  } catch (error) {
-    console.error("MongoDB connection error:", error);
-    throw error;
-  }
-};
-
-// Handle requests after connecting to database
+// Handle database connection before processing requests
 app.use(async (req, res, next) => {
   try {
-    await connectToDatabase();
+    if (!isConnected) {
+      console.log("Connecting to MongoDB...");
+      await connectDB();
+      isConnected = true;
+      console.log("✅ MongoDB Connected");
+    }
     next();
   } catch (error) {
     console.error("Database connection error:", error);
@@ -61,7 +36,10 @@ app.use(async (req, res, next) => {
   }
 });
 
-// For local development only
+// Register route handlers
+app.use("/api/user", userRouter);
+app.use("/api/owner", ownerRouter);
+app.use("/api/booking", bookingRouter);
 
 // Export for serverless environment
 export default app;
