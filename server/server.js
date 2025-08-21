@@ -1,43 +1,36 @@
+// index.js
 import express from "express";
-import "dotenv/config";
-import cors from "cors";
-import connectDB from "./configs/db.js";
-import userRouter from "./routes/userRoute.js";
-import ownerRouter from "./routes/ownerRoute.js";
-import bookingRouter from "./routes/bookingRoutes.js";
+import mongoose from "mongoose";
+// other imports
 
-// Initialize express app
 const app = express();
 
 // Middleware
 app.use(express.json());
+// other middleware
 
-// Basic route
-app.get("/", (req, res) => res.send("Server is running"));
+// Routes
+app.use("/api/owners", ownerRoutes);
+// other routes
 
-// Database connection handling
-let isConnected = false;
-
-// Handle database connection before processing requests
-app.use(async (req, res, next) => {
+// Connect to database
+const connectDB = async () => {
   try {
-    if (!isConnected) {
-      console.log("Connecting to MongoDB...");
-      await connectDB();
-      isConnected = true;
-      console.log("✅ MongoDB Connected");
-    }
-    next();
+    await mongoose.connect(process.env.MONGO_URI);
+    console.log("MongoDB connected");
   } catch (error) {
-    console.error("Database connection error:", error);
-    return res.status(500).json({ error: "Failed to connect to database" });
+    console.error("MongoDB connection error:", error.message);
+    process.exit(1);
   }
-});
+};
 
-// Register API routes
-app.use("/api/user", userRouter);
-app.use("/api/owner", ownerRouter);
-app.use("/api/booking", bookingRouter);
+connectDB();
 
-// Export for serverless environment
+// For local development
+if (process.env.NODE_ENV !== "production") {
+  const PORT = process.env.PORT || 5000;
+  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+}
+
+// Export for serverless
 export default app;
