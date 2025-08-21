@@ -6,7 +6,7 @@ import userRouter from "./routes/userRoute.js";
 import ownerRouter from "./routes/ownerRoute.js";
 import bookingRouter from "./routes/bookingRoutes.js";
 
-// Init express app
+// Initialize Express app
 const app = express();
 
 // Middleware
@@ -14,38 +14,50 @@ app.use(
   cors({
     origin:
       process.env.NODE_ENV === "production"
-        ? ["https://your-frontend-domain.vercel.app"]
+        ? ["https://cebu-don-motorrental.vercel.app/"]
         : ["http://localhost:5173", "http://127.0.0.1:5173"],
     credentials: true,
   })
 );
 app.use(express.json());
 
-// Routes
+// Health check route
 app.get("/", (req, res) => res.send("Server is running"));
+
+// Database connection middleware
+app.use(async (req, res, next) => {
+  try {
+    if (!req.dbConnected) {
+      await connectDB();
+      req.dbConnected = true;
+    }
+    next();
+  } catch (error) {
+    console.error("Database connection error:", error);
+    return res.status(500).json({ error: "Database connection failed" });
+  }
+});
+
+// API Routes
 app.use("/api/user", userRouter);
 app.use("/api/owner", ownerRouter);
 app.use("/api/booking", bookingRouter);
 
-// Connect to MongoDB and start server
-const startServer = async () => {
-  try {
-    console.log("Connecting to MongoDB...");
-    await connectDB();
-    console.log("✅ MongoDB Connected");
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error("Error:", err);
+  res.status(500).json({
+    error: "Internal Server Error",
+    message:
+      process.env.NODE_ENV === "production" ? "Server error" : err.message,
+  });
+});
 
-    const PORT = process.env.PORT || 8000;
-    // Only start the server if not in Vercel environment
-    if (process.env.NODE_ENV !== "production") {
-      app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-    }
-  } catch (error) {
-    console.error("Failed to start server:", error);
-    process.exit(1);
-  }
-};
+// Start server for local development only
+if (process.env.NODE_ENV !== "production") {
+  const PORT = process.env.PORT || 8000;
+  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+}
 
-startServer();
-
-// Export for Vercel serverless functions
+// Export for Vercel
 export default app;

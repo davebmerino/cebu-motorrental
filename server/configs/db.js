@@ -1,29 +1,27 @@
 import mongoose from "mongoose";
 
+// Cache the MongoDB connection for serverless environment
+let cachedConnection = null;
+
 const connectDB = async () => {
+  if (cachedConnection) {
+    console.log("Using cached database connection");
+    return cachedConnection;
+  }
+
+  console.log("Creating new database connection");
+
   try {
-    // mongoose.connection.on("Connected", () =>
-    //   console.log("Database Connected")
-    // );
+    const conn = await mongoose.connect(process.env.MONGODB_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
 
-    mongoose.set("strictQuery", false);
-
-    // Connection options with increased timeouts
-    const options = {
-      serverSelectionTimeoutMS: 30000,
-      socketTimeoutMS: 45000,
-    };
-
-    // await mongoose.connect(`${process.env.MONGODB_URI}/moto_rental`);
-    // console.log("✅ MongoDB Connected");
-
-    // Connect with explicit promise handling
-    const conn = await mongoose.connect(process.env.MONGODB_URI, options);
+    cachedConnection = conn;
     return conn;
   } catch (error) {
-    // console.log(error.message);
-    console.error(`MongoDB connection error: ${error.message}`);
-    process.exit(1); // Exit with failure
+    console.error("MongoDB connection error:", error);
+    throw error;
   }
 };
 
