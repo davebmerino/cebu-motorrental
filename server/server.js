@@ -1,7 +1,8 @@
+// server.js
 import express from "express";
 import "dotenv/config";
 import cors from "cors";
-import connectDB from "./configs/db.js";
+import mongoose from "mongoose";
 import userRouter from "./routes/userRoute.js";
 import ownerRouter from "./routes/ownerRoute.js";
 import bookingRouter from "./routes/bookingRoutes.js";
@@ -10,42 +11,75 @@ import bookingRouter from "./routes/bookingRoutes.js";
 const app = express();
 
 // Middleware
+app.use(express.json());
 app.use(
   cors({
-    origin:
-      process.env.NODE_ENV === "production"
-        ? ["https://cebu-don-motorrental.vercel.app/"]
-        : ["http://localhost:5173", "http://127.0.0.1:5173"],
+    origin: "*", // For testing - update this after successful deployment
     credentials: true,
   })
 );
-app.use(express.json());
 
-// Health check route
-app.get("/", (req, res) => res.send("Server is running"));
-
-// Database connection middleware
-app.use(async (req, res, next) => {
-  try {
-    if (!req.dbConnected) {
-      await connectDB();
-      req.dbConnected = true;
-    }
-    next();
-  } catch (error) {
-    console.error("Database connection error:", error);
-    return res.status(500).json({ error: "Database connection failed" });
-  }
+// Simple health check route that doesn't depend on MongoDB
+app.get("/", (req, res) => {
+  res.status(200).send("Cebu MotorRental API is running");
 });
 
-// API Routes
-app.use("/api/user", userRouter);
-app.use("/api/owner", ownerRouter);
-app.use("/api/booking", bookingRouter);
+// Connect to MongoDB - optimized for serverless
+let cachedDb = null;
+
+async function connectToDatabase() {
+  if (cachedDb) {
+    return cachedDb;
+  }
+
+  // If no connection, create a new one
+  try {
+    const client = await mongoose.connect(process.env.MONGODB_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
+
+    cachedDb = client;
+    return client;
+  } catch (error) {
+    console.error("MongoDB connection error:", error);
+    throw error;
+  }
+}
+
+// Wrap route handlers to ensure DB connection
+const withDb = (handler) => {
+  return async (req, res, next) => {
+    try {
+      await connectToDatabase();
+      return handler(req, res, next);
+    } catch (error) {
+      console.error("Error in withDb middleware:", error);
+      return res.status(500).json({
+        error: "Database connection failed",
+        message: error.message,
+      });
+    }
+  };
+};
+
+// Apply database connection to API routes
+app.use(
+  "/api/user",
+  withDb((req, res, next) => userRouter(req, res, next))
+);
+app.use(
+  "/api/owner",
+  withDb((req, res, next) => ownerRouter(req, res, next))
+);
+app.use(
+  "/api/booking",
+  withDb((req, res, next) => bookingRouter(req, res, next))
+);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error("Error:", err);
+  console.error("Unhandled error:", err);
   res.status(500).json({
     error: "Internal Server Error",
     message:
@@ -53,11 +87,18 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Start server for local development only
+// Start server for local development
 if (process.env.NODE_ENV !== "production") {
   const PORT = process.env.PORT || 8000;
-  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+  connectToDatabase()
+    .then(() => {
+      app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+    })
+    .catch((err) => {
+      console.error("Failed to connect to MongoDB:", err);
+      process.exit(1);
+    });
 }
 
-// Export for Vercel
+// Export the app for Vercel
 export default app;
